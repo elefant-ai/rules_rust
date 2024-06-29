@@ -22,7 +22,7 @@ use crate::utils::starlark::Label;
 use crate::utils::target_triple::TargetTriple;
 
 /// Representations of different kinds of crate vendoring into workspaces.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum VendorMode {
     /// Crates having full source being vendored into a workspace
@@ -119,6 +119,12 @@ impl Default for RenderConfig {
             vendor_mode: Option::default(),
             generate_rules_license_metadata: default_generate_rules_license_metadata(),
         }
+    }
+}
+
+impl RenderConfig {
+    pub(crate) fn are_sources_present(&self) -> bool {
+        self.vendor_mode == Some(VendorMode::Local)
     }
 }
 
@@ -338,6 +344,9 @@ pub(crate) struct CrateAnnotations {
 
     /// Transition rule to use instead of `native.alias()`.
     pub(crate) alias_rule: Option<AliasRule>,
+
+    /// The crates to use instead of the generated one.
+    pub(crate) override_targets: Option<BTreeMap<String, Label>>,
 }
 
 macro_rules! joined_extra_member {
@@ -410,6 +419,7 @@ impl Add for CrateAnnotations {
             patches: joined_extra_member!(self.patches, rhs.patches, BTreeSet::new, BTreeSet::extend),
             extra_aliased_targets: joined_extra_member!(self.extra_aliased_targets, rhs.extra_aliased_targets, BTreeMap::new, BTreeMap::extend),
             alias_rule: self.alias_rule.or(rhs.alias_rule),
+            override_targets: self.override_targets.or(rhs.override_targets),
         };
 
         output
