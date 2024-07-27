@@ -241,6 +241,7 @@ def collect_deps(
                 crate_deps.append(struct(
                     crate_info = dep_variant_info.crate_info,
                     dep_info = dep_variant_info.dep_info,
+                    cc_info = dep_variant_info.cc_info,
                 ))
 
     aliases = {k.label: v for k, v in aliases.items()}
@@ -1616,7 +1617,7 @@ def establish_cc_info(ctx, attr, crate_info, toolchain, cc_toolchain, feature_co
         # bazel hard-codes a check for endswith((".a", ".pic.a",
         # ".lib")) in create_library_to_link, so we work around that
         # by creating a symlink to the .rlib with a .a extension.
-        dot_a = make_static_lib_symlink(ctx.actions, crate_info.output)
+        dot_a = make_static_lib_symlink(ctx.label.package, ctx.actions, crate_info.output)
 
         # TODO(hlopko): handle PIC/NOPIC correctly
         library_to_link = cc_common.create_library_to_link(

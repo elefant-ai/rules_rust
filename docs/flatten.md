@@ -327,7 +327,7 @@ is available under the key `dsym_folder` in `OutputGroupInfo`.
 ## rust_bindgen
 
 <pre>
-rust_bindgen(<a href="#rust_bindgen-name">name</a>, <a href="#rust_bindgen-bindgen_flags">bindgen_flags</a>, <a href="#rust_bindgen-cc_lib">cc_lib</a>, <a href="#rust_bindgen-clang_flags">clang_flags</a>, <a href="#rust_bindgen-header">header</a>)
+rust_bindgen(<a href="#rust_bindgen-name">name</a>, <a href="#rust_bindgen-bindgen_flags">bindgen_flags</a>, <a href="#rust_bindgen-cc_lib">cc_lib</a>, <a href="#rust_bindgen-clang_flags">clang_flags</a>, <a href="#rust_bindgen-header">header</a>, <a href="#rust_bindgen-wrap_static_fns">wrap_static_fns</a>)
 </pre>
 
 Generates a rust source file from a cc_library and a header.
@@ -342,6 +342,7 @@ Generates a rust source file from a cc_library and a header.
 | <a id="rust_bindgen-cc_lib"></a>cc_lib |  The cc_library that contains the `.h` file. This is used to find the transitive includes.   | <a href="https://bazel.build/concepts/labels">Label</a> | required |  |
 | <a id="rust_bindgen-clang_flags"></a>clang_flags |  Flags to pass directly to the clang executable.   | List of strings | optional |  `[]`  |
 | <a id="rust_bindgen-header"></a>header |  The `.h` file to generate bindings for.   | <a href="https://bazel.build/concepts/labels">Label</a> | required |  |
+| <a id="rust_bindgen-wrap_static_fns"></a>wrap_static_fns |  Whether to create a separate .c file for static fns. Requires nightly toolchain, and a header that actually needs this feature (otherwise bindgen won't generate the file and Bazel complains).   | Boolean | optional |  `False`  |
 
 
 <a id="rust_bindgen_toolchain"></a>
@@ -808,7 +809,7 @@ Rust Prost toolchain rule.
 | <a id="rust_prost_toolchain-prost_plugin_flag"></a>prost_plugin_flag |  Prost plugin flag format. (e.g. `--plugin=protoc-gen-prost=%s`)   | String | optional |  `"--plugin=protoc-gen-prost=%s"`  |
 | <a id="rust_prost_toolchain-prost_runtime"></a>prost_runtime |  The Prost runtime crates to use.   | <a href="https://bazel.build/concepts/labels">Label</a> | required |  |
 | <a id="rust_prost_toolchain-prost_types"></a>prost_types |  The Prost types crates to use.   | <a href="https://bazel.build/concepts/labels">Label</a> | required |  |
-| <a id="rust_prost_toolchain-proto_compiler"></a>proto_compiler |  The protoc compiler to use.   | <a href="https://bazel.build/concepts/labels">Label</a> | required |  |
+| <a id="rust_prost_toolchain-proto_compiler"></a>proto_compiler |  The protoc compiler to use. Note that this attribute is deprecated - prefer to use --incompatible_enable_proto_toolchain_resolution.   | <a href="https://bazel.build/concepts/labels">Label</a> | optional |  `None`  |
 | <a id="rust_prost_toolchain-tonic_opts"></a>tonic_opts |  Additional options to add to Tonic.   | List of strings | optional |  `[]`  |
 | <a id="rust_prost_toolchain-tonic_plugin"></a>tonic_plugin |  Additional plugins to add to Tonic.   | <a href="https://bazel.build/concepts/labels">Label</a> | optional |  `None`  |
 | <a id="rust_prost_toolchain-tonic_plugin_flag"></a>tonic_plugin_flag |  Tonic plugin flag format. (e.g. `--plugin=protoc-gen-tonic=%s`))   | String | optional |  `"--plugin=protoc-gen-tonic=%s"`  |
@@ -1668,7 +1669,8 @@ list[struct(repo=str, is_dev_dep=bool)]: A list of the repositories
 ## rust_bindgen_library
 
 <pre>
-rust_bindgen_library(<a href="#rust_bindgen_library-name">name</a>, <a href="#rust_bindgen_library-header">header</a>, <a href="#rust_bindgen_library-cc_lib">cc_lib</a>, <a href="#rust_bindgen_library-bindgen_flags">bindgen_flags</a>, <a href="#rust_bindgen_library-bindgen_features">bindgen_features</a>, <a href="#rust_bindgen_library-clang_flags">clang_flags</a>, <a href="#rust_bindgen_library-kwargs">kwargs</a>)
+rust_bindgen_library(<a href="#rust_bindgen_library-name">name</a>, <a href="#rust_bindgen_library-header">header</a>, <a href="#rust_bindgen_library-cc_lib">cc_lib</a>, <a href="#rust_bindgen_library-bindgen_flags">bindgen_flags</a>, <a href="#rust_bindgen_library-bindgen_features">bindgen_features</a>, <a href="#rust_bindgen_library-clang_flags">clang_flags</a>,
+                     <a href="#rust_bindgen_library-wrap_static_fns">wrap_static_fns</a>, <a href="#rust_bindgen_library-kwargs">kwargs</a>)
 </pre>
 
 Generates a rust source file for `header`, and builds a rust_library.
@@ -1687,6 +1689,7 @@ Arguments are the same as `rust_bindgen`, and `kwargs` are passed directly to ru
 | <a id="rust_bindgen_library-bindgen_flags"></a>bindgen_flags |  Flags to pass directly to the bindgen executable. See https://rust-lang.github.io/rust-bindgen/ for details.   |  `None` |
 | <a id="rust_bindgen_library-bindgen_features"></a>bindgen_features |  The `features` attribute for the `rust_bindgen` target.   |  `None` |
 | <a id="rust_bindgen_library-clang_flags"></a>clang_flags |  Flags to pass directly to the clang executable.   |  `None` |
+| <a id="rust_bindgen_library-wrap_static_fns"></a>wrap_static_fns |  Whether to create a separate .c file for static fns. Requires nightly toolchain, and a header that actually needs this feature (otherwise bindgen won't generate the file and Bazel complains",   |  `False` |
 | <a id="rust_bindgen_library-kwargs"></a>kwargs |  Arguments to forward to the underlying `rust_library` rule.   |  none |
 
 
@@ -1775,14 +1778,18 @@ This macro should be called immediately after the `rust_protobuf_dependencies` m
 rust_proto_protobuf_dependencies(<a href="#rust_proto_protobuf_dependencies-bzlmod">bzlmod</a>)
 </pre>
 
-
+Sets up dependencies for rules_rust's proto support.
 
 **PARAMETERS**
 
 
 | Name  | Description | Default Value |
 | :------------- | :------------- | :------------- |
-| <a id="rust_proto_protobuf_dependencies-bzlmod"></a>bzlmod |  <p align="center"> - </p>   |  `False` |
+| <a id="rust_proto_protobuf_dependencies-bzlmod"></a>bzlmod |  Whether this function is being called from a bzlmod context rather than a workspace context.   |  `False` |
+
+**RETURNS**
+
+A list of structs containing information about root module deps to report to bzlmod's extension_metadata.
 
 
 <a id="rust_proto_protobuf_register_toolchains"></a>
@@ -1934,7 +1941,7 @@ Assembles a remote repository for the given toolchain params, produces a proxy r
 ## rust_test_suite
 
 <pre>
-rust_test_suite(<a href="#rust_test_suite-name">name</a>, <a href="#rust_test_suite-srcs">srcs</a>, <a href="#rust_test_suite-kwargs">kwargs</a>)
+rust_test_suite(<a href="#rust_test_suite-name">name</a>, <a href="#rust_test_suite-srcs">srcs</a>, <a href="#rust_test_suite-shared_srcs">shared_srcs</a>, <a href="#rust_test_suite-kwargs">kwargs</a>)
 </pre>
 
 A rule for creating a test suite for a set of `rust_test` targets.
@@ -1954,6 +1961,8 @@ directory structure:
         integrated_test_c.rs
         patterns/
             fibonacci_test.rs
+        helpers/
+            mod.rs
 ```
 
 The rule can be used to generate [rust_test](#rust_test) targets for each source file under `tests`
@@ -1975,6 +1984,7 @@ rust_binary(
 rust_test_suite(
     name = "integrated_tests_suite",
     srcs = glob(["tests/**"]),
+    shared_srcs=glob(["tests/helpers/**"]),
     deps = [":math_lib"],
 )
 ```
@@ -1990,6 +2000,7 @@ rust_test_suite(
 | :------------- | :------------- | :------------- |
 | <a id="rust_test_suite-name"></a>name |  The name of the `test_suite`.   |  none |
 | <a id="rust_test_suite-srcs"></a>srcs |  All test sources, typically `glob(["tests/**/*.rs"])`.   |  none |
+| <a id="rust_test_suite-shared_srcs"></a>shared_srcs |  Optional argument for sources shared among tests, typically helper functions.   |  `[]` |
 | <a id="rust_test_suite-kwargs"></a>kwargs |  Additional keyword arguments for the underyling [rust_test](#rust_test) targets. The `tags` argument is also passed to the generated `test_suite` target.   |  none |
 
 
