@@ -35,6 +35,7 @@ pub(crate) enum Starlark {
     Filegroup(Filegroup),
     Alias(Alias),
     CargoBuildScript(CargoBuildScript),
+    CargoTomlEnvVars(CargoTomlEnvVars),
     #[serde(serialize_with = "serialize::rust_proc_macro")]
     RustProcMacro(RustProcMacro),
     #[serde(serialize_with = "serialize::rust_library")]
@@ -81,6 +82,7 @@ pub(crate) struct Filegroup {
     pub(crate) srcs: Glob,
 }
 
+#[derive(Debug)]
 pub(crate) struct Alias {
     pub(crate) rule: String,
     pub(crate) name: String,
@@ -88,7 +90,7 @@ pub(crate) struct Alias {
     pub(crate) tags: Set<String>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 #[serde(rename = "cargo_build_script")]
 pub(crate) struct CargoBuildScript {
     pub(crate) name: String,
@@ -133,8 +135,17 @@ pub(crate) struct CargoBuildScript {
     pub(crate) tools: SelectSet<Label>,
     #[serde(skip_serializing_if = "Set::is_empty")]
     pub(crate) toolchains: Set<Label>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) use_default_shell_env: Option<i32>,
     pub(crate) version: String,
     pub(crate) visibility: Set<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename = "cargo_toml_env_vars")]
+pub(crate) struct CargoTomlEnvVars {
+    pub(crate) name: String,
+    pub(crate) src: String,
 }
 
 #[derive(Serialize)]
@@ -205,6 +216,7 @@ pub(crate) struct CommonAttrs {
     pub(crate) version: String,
 }
 
+#[derive(Debug)]
 pub(crate) struct Data {
     pub(crate) glob: Glob,
     pub(crate) select: SelectSet<Label>,

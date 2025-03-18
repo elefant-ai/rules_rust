@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use anyhow::{bail, Context as AnyhowContext, Result};
 use itertools::Itertools;
@@ -13,13 +14,14 @@ use itertools::Itertools;
 use crate::config::{AliasRule, RenderConfig, VendorMode};
 use crate::context::crate_context::{CrateContext, CrateDependency, Rule};
 use crate::context::{Context, TargetAttributes};
+use crate::metadata::SourceAnnotation;
 use crate::rendering::template_engine::TemplateEngine;
 use crate::select::Select;
 use crate::splicing::default_splicing_package_crate_id;
 use crate::utils::starlark::{
-    self, Alias, CargoBuildScript, CommonAttrs, Data, ExportsFiles, Filegroup, Glob, Label, Load,
-    Package, RustBinary, RustLibrary, RustProcMacro, SelectDict, SelectList, SelectScalar,
-    SelectSet, Starlark, TargetCompatibleWith,
+    self, Alias, CargoBuildScript, CargoTomlEnvVars, CommonAttrs, Data, ExportsFiles, Filegroup,
+    Glob, Label, Load, Package, RustBinary, RustLibrary, RustProcMacro, SelectDict, SelectList,
+    SelectScalar, SelectSet, Starlark, TargetCompatibleWith,
 };
 use crate::utils::target_triple::TargetTriple;
 use crate::utils::{self, sanitize_repository_name};
@@ -29,30 +31,34 @@ use crate::utils::{self, sanitize_repository_name};
 pub(crate) type Platforms = BTreeMap<String, BTreeSet<String>>;
 
 pub(crate) struct Renderer {
-    config: RenderConfig,
-    supported_platform_triples: BTreeSet<TargetTriple>,
-    engine: TemplateEngine,
+    config: Arc<RenderConfig>,
+    supported_platform_triples: Arc<BTreeSet<TargetTriple>>,
 }
 
 impl Renderer {
     pub(crate) fn new(
-        config: RenderConfig,
-        supported_platform_triples: BTreeSet<TargetTriple>,
+        config: Arc<RenderConfig>,
+        supported_platform_triples: Arc<BTreeSet<TargetTriple>>,
     ) -> Self {
-        let engine = TemplateEngine::new(&config);
         Self {
             config,
             supported_platform_triples,
-            engine,
         }
     }
 
-    pub(crate) fn render(&self, context: &Context) -> Result<BTreeMap<PathBuf, String>> {
+    pub(crate) fn render(
+        &self,
+        context: &Context,
+        generator: Option<Label>,
+    ) -> Result<BTreeMap<PathBuf, String>> {
+        let conditions = Arc::new(context.conditions.clone());
+        let engine = self.create_engine(Arc::clone(&conditions));
+
         let mut output = BTreeMap::new();
 
-        let platforms = self.render_platform_labels(context);
-        output.extend(self.render_build_files(context, &platforms)?);
-        output.extend(self.render_crates_module(context, &platforms)?);
+        let platforms = self.render_platform_labels(conditions);
+        output.extend(self.render_build_files(&engine, context, &platforms)?);
+        output.extend(self.render_crates_module(&engine, context, &platforms, generator)?);
 
         if let Some(vendor_mode) = &self.config.vendor_mode {
             match vendor_mode {
@@ -60,7 +66,7 @@ impl Renderer {
                     // Nothing to do for local vendor crate
                 }
                 crate::config::VendorMode::Remote => {
-                    output.extend(self.render_vendor_support_files(context)?);
+                    output.extend(self.render_vendor_support_files(&engine, context)?);
                 }
             }
         }
@@ -68,9 +74,22 @@ impl Renderer {
         Ok(output)
     }
 
-    fn render_platform_labels(&self, context: &Context) -> BTreeMap<String, BTreeSet<String>> {
-        context
-            .conditions
+    pub(crate) fn create_engine(
+        &self,
+        conditions: Arc<BTreeMap<String, BTreeSet<TargetTriple>>>,
+    ) -> TemplateEngine {
+        TemplateEngine::new(
+            Arc::clone(&self.config),
+            Arc::clone(&self.supported_platform_triples),
+            Arc::clone(&conditions),
+        )
+    }
+
+    pub(crate) fn render_platform_labels(
+        &self,
+        conditions: Arc<BTreeMap<String, BTreeSet<TargetTriple>>>,
+    ) -> BTreeMap<String, BTreeSet<String>> {
+        conditions
             .iter()
             .map(|(cfg, target_triples)| {
                 (
@@ -91,8 +110,10 @@ impl Renderer {
 
     fn render_crates_module(
         &self,
+        engine: &TemplateEngine,
         context: &Context,
         platforms: &Platforms,
+        generator: Option<Label>,
     ) -> Result<BTreeMap<PathBuf, String>> {
         let module_label = render_module_label(&self.config.crates_module_template, "defs.bzl")
             .context("Failed to resolve string to module file label")?;
@@ -106,11 +127,11 @@ impl Renderer {
         let mut map = BTreeMap::new();
         map.insert(
             Renderer::label_to_path(&module_label),
-            self.engine.render_module_bzl(context, platforms)?,
+            engine.render_module_bzl(context, platforms, generator)?,
         );
         map.insert(
             Renderer::label_to_path(&module_build_label),
-            self.render_module_build_file(context)?,
+            self.render_module_build_file(engine, context)?,
         );
         map.insert(
             Renderer::label_to_path(&module_alias_rules_label),
@@ -124,11 +145,15 @@ impl Renderer {
         Ok(map)
     }
 
-    fn render_module_build_file(&self, context: &Context) -> Result<String> {
+    fn render_module_build_file(
+        &self,
+        engine: &TemplateEngine,
+        context: &Context,
+    ) -> Result<String> {
         let mut starlark = Vec::new();
 
         // Banner comment for top of the file.
-        let header = self.engine.render_header()?;
+        let header = engine.render_header()?;
         starlark.push(Starlark::Verbatim(header));
 
         // Load any `alias_rule`s.
@@ -185,15 +210,9 @@ impl Renderer {
                 .unwrap_or(&self.config.default_alias_rule);
 
             if let Some(library_target_name) = &krate.library_target_name {
-                let rename = dep.alias.as_ref().unwrap_or(&krate.name);
                 dependencies.push(Alias {
                     rule: alias_rule.rule(),
-                    // If duplicates exist, include version to disambiguate them.
-                    name: if context.has_duplicate_workspace_member_dep(&dep) {
-                        format!("{}-{}", rename, krate.version)
-                    } else {
-                        rename.clone()
-                    },
+                    name: format!("{}-{}", krate.name, krate.version),
                     actual: self.crate_label(
                         &krate.name,
                         &krate.version.to_string(),
@@ -201,6 +220,41 @@ impl Renderer {
                     ),
                     tags: BTreeSet::from(["manual".to_owned()]),
                 });
+
+                let shorthand = if let Some(rename) = dep.alias.as_ref() {
+                    // when the alias is the same as the crate name, don't create the alias
+                    if krate.name != *rename {
+                        dependencies.push(Alias {
+                            rule: alias_rule.rule(),
+                            name: format!("{}-{}", rename, krate.version),
+                            actual: self.crate_label(
+                                &krate.name,
+                                &krate.version.to_string(),
+                                library_target_name,
+                            ),
+                            tags: BTreeSet::from(["manual".to_owned()]),
+                        });
+                    }
+                    rename
+                } else {
+                    &krate.name
+                };
+
+                // Add a shorthand for crate names as long as there isn't a duplicate
+                // entry. Shorthands for duplicate entries would lead to ambiguous
+                // dependencies.
+                if !context.has_duplicate_workspace_member_dep(&dep) {
+                    dependencies.push(Alias {
+                        rule: alias_rule.rule(),
+                        name: shorthand.clone(),
+                        actual: self.crate_label(
+                            &krate.name,
+                            &krate.version.to_string(),
+                            library_target_name,
+                        ),
+                        tags: BTreeSet::from(["manual".to_owned()]),
+                    });
+                }
             }
 
             for (alias, target) in &krate.extra_aliased_targets {
@@ -268,6 +322,7 @@ impl Renderer {
 
     fn render_build_files(
         &self,
+        engine: &TemplateEngine,
         context: &Context,
         platforms: &Platforms,
     ) -> Result<BTreeMap<PathBuf, String>> {
@@ -289,18 +344,35 @@ impl Renderer {
                     Err(e) => bail!(e),
                 };
 
-                let filename = Renderer::label_to_path(&label);
-                let content = self.render_one_build_file(platforms, &context.crates[id])?;
+                let filename = match &context.crates[id].repository {
+                    Some(SourceAnnotation::Path { path }) => path.join("BUILD.bazel").into(),
+                    _ => Renderer::label_to_path(&label),
+                };
+                let content = self.render_one_build_file(engine, platforms, &context.crates[id])?;
                 Ok((filename, content))
             })
             .collect()
     }
 
-    fn render_one_build_file(&self, platforms: &Platforms, krate: &CrateContext) -> Result<String> {
+    pub(crate) fn render_one_build_file(
+        &self,
+        engine: &TemplateEngine,
+        platforms: &Platforms,
+        krate: &CrateContext,
+    ) -> Result<String> {
+        let mut krate = krate.clone();
+
+        if self.config.generate_cargo_toml_env_vars {
+            krate
+                .common_attrs
+                .rustc_env_files
+                .insert(":cargo_toml_env_vars".to_owned(), None);
+        }
+
         let mut starlark = Vec::new();
 
         // Banner comment for top of the file.
-        let header = self.engine.render_header()?;
+        let header = engine.render_header()?;
         starlark.push(Starlark::Verbatim(header));
 
         // Loads: map of bzl file to set of items imported from that file. These
@@ -370,6 +442,14 @@ impl Renderer {
             starlark.push(Starlark::Package(package));
         }
 
+        if self.config.generate_cargo_toml_env_vars {
+            load("@rules_rust//cargo:defs.bzl", "cargo_toml_env_vars");
+            starlark.push(Starlark::CargoTomlEnvVars(CargoTomlEnvVars {
+                name: "cargo_toml_env_vars".to_owned(),
+                src: "Cargo.toml".to_owned(),
+            }));
+        }
+
         for rule in &krate.targets {
             if let Some(override_target) = krate.override_targets.get(rule.override_target_key()) {
                 starlark.push(Starlark::Alias(Alias {
@@ -383,7 +463,7 @@ impl Renderer {
                     Rule::BuildScript(target) => {
                         load("@rules_rust//cargo:defs.bzl", "cargo_build_script");
                         let cargo_build_script =
-                            self.make_cargo_build_script(platforms, krate, target)?;
+                            self.make_cargo_build_script(platforms, &krate, target)?;
                         starlark.push(Starlark::CargoBuildScript(cargo_build_script));
                         starlark.push(Starlark::Alias(Alias {
                             rule: AliasRule::default().rule(),
@@ -395,17 +475,17 @@ impl Renderer {
                     Rule::ProcMacro(target) => {
                         load("@rules_rust//rust:defs.bzl", "rust_proc_macro");
                         let rust_proc_macro =
-                            self.make_rust_proc_macro(platforms, krate, target)?;
+                            self.make_rust_proc_macro(platforms, &krate, target)?;
                         starlark.push(Starlark::RustProcMacro(rust_proc_macro));
                     }
                     Rule::Library(target) => {
                         load("@rules_rust//rust:defs.bzl", "rust_library");
-                        let rust_library = self.make_rust_library(platforms, krate, target)?;
+                        let rust_library = self.make_rust_library(platforms, &krate, target)?;
                         starlark.push(Starlark::RustLibrary(rust_library));
                     }
                     Rule::Binary(target) => {
                         load("@rules_rust//rust:defs.bzl", "rust_binary");
-                        let rust_binary = self.make_rust_binary(platforms, krate, target)?;
+                        let rust_binary = self.make_rust_binary(platforms, &krate, target)?;
                         starlark.push(Starlark::RustBinary(rust_binary));
                     }
                 }
@@ -454,9 +534,18 @@ impl Renderer {
                     .unwrap_or_default(),
                 platforms,
             ),
-            compile_data: make_data(
+            use_default_shell_env: krate
+                .build_script_attrs
+                .as_ref()
+                .and_then(|a| a.use_default_shell_env),
+            compile_data: make_data_with_exclude(
                 platforms,
-                Default::default(),
+                attrs
+                    .map(|attrs| attrs.compile_data_glob.clone())
+                    .unwrap_or_default(),
+                attrs
+                    .map(|attrs| attrs.compile_data_glob_excludes.clone())
+                    .unwrap_or_default(),
                 attrs
                     .map(|attrs| attrs.compile_data.clone())
                     .unwrap_or_default(),
@@ -469,6 +558,7 @@ impl Renderer {
                 attrs
                     .map(|attrs| attrs.data_glob.clone())
                     .unwrap_or_default(),
+                Default::default(),
                 attrs.map(|attrs| attrs.data.clone()).unwrap_or_default(),
             ),
             deps: SelectSet::new(
@@ -653,6 +743,7 @@ impl Renderer {
             compile_data: make_data(
                 platforms,
                 krate.common_attrs.compile_data_glob.clone(),
+                krate.common_attrs.compile_data_glob_excludes.clone(),
                 krate.common_attrs.compile_data.clone(),
             ),
             crate_features: SelectSet::new(krate.common_attrs.crate_features.clone(), platforms),
@@ -660,6 +751,7 @@ impl Renderer {
             data: make_data(
                 platforms,
                 krate.common_attrs.data_glob.clone(),
+                Default::default(),
                 krate.common_attrs.data.clone(),
             ),
             edition: krate.common_attrs.edition.clone(),
@@ -748,21 +840,26 @@ impl Renderer {
         extra_deps: Select<BTreeSet<Label>>,
     ) -> Select<BTreeSet<Label>> {
         Select::merge(
-            deps.map(|dep| {
-                self.crate_label(&dep.id.name, &dep.id.version.to_string(), &dep.target)
+            deps.map(|dep| match dep.local_path {
+                Some(path) => Label::from_str(&format!("//{}:{}", path, &dep.target)).unwrap(),
+                _ => self.crate_label(&dep.id.name, &dep.id.version.to_string(), &dep.target),
             }),
             extra_deps,
         )
     }
 
-    fn render_vendor_support_files(&self, context: &Context) -> Result<BTreeMap<PathBuf, String>> {
+    fn render_vendor_support_files(
+        &self,
+        engine: &TemplateEngine,
+        context: &Context,
+    ) -> Result<BTreeMap<PathBuf, String>> {
         let module_label = render_module_label(&self.config.crates_module_template, "crates.bzl")
             .context("Failed to resolve string to module file label")?;
 
         let mut map = BTreeMap::new();
         map.insert(
             Renderer::label_to_path(&module_label),
-            self.engine.render_vendor_module_file(context)?,
+            engine.render_vendor_module_file(context)?,
         );
 
         Ok(map)
@@ -870,9 +967,10 @@ fn render_build_file_template(template: &str, name: &str, version: &str) -> Resu
     )
 }
 
-fn make_data(
+fn make_data_with_exclude(
     platforms: &Platforms,
-    glob: BTreeSet<String>,
+    include: BTreeSet<String>,
+    exclude: BTreeSet<String>,
     select: Select<BTreeSet<Label>>,
 ) -> Data {
     const COMMON_GLOB_EXCLUDES: &[&str] = &[
@@ -887,20 +985,31 @@ fn make_data(
     Data {
         glob: Glob {
             allow_empty: true,
-            include: glob,
+            include,
             exclude: COMMON_GLOB_EXCLUDES
                 .iter()
                 .map(|&glob| glob.to_owned())
+                .chain(exclude)
                 .collect(),
         },
         select: SelectSet::new(select, platforms),
     }
 }
 
+fn make_data(
+    platforms: &Platforms,
+    glob: BTreeSet<String>,
+    excludes: BTreeSet<String>,
+    select: Select<BTreeSet<Label>>,
+) -> Data {
+    make_data_with_exclude(platforms, glob, excludes, select)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
 
+    use camino::Utf8Path;
     use indoc::indoc;
 
     use crate::config::{Config, CrateId};
@@ -919,17 +1028,17 @@ mod test {
         }
     }
 
-    fn mock_render_config(vendor_mode: Option<VendorMode>) -> RenderConfig {
-        RenderConfig {
+    fn mock_render_config(vendor_mode: Option<VendorMode>) -> Arc<RenderConfig> {
+        Arc::new(RenderConfig {
             repository_name: "test_rendering".to_owned(),
             regen_command: "cargo_bazel_regen_command".to_owned(),
             vendor_mode,
             ..RenderConfig::default()
-        }
+        })
     }
 
-    fn mock_supported_platform_triples() -> BTreeSet<TargetTriple> {
-        BTreeSet::from([
+    fn mock_supported_platform_triples() -> Arc<BTreeSet<TargetTriple>> {
+        Arc::new(BTreeSet::from([
             TargetTriple::from_bazel("aarch64-apple-darwin".to_owned()),
             TargetTriple::from_bazel("aarch64-apple-ios".to_owned()),
             TargetTriple::from_bazel("aarch64-linux-android".to_owned()),
@@ -945,14 +1054,14 @@ mod test {
             TargetTriple::from_bazel("powerpc-unknown-linux-gnu".to_owned()),
             TargetTriple::from_bazel("s390x-unknown-linux-gnu".to_owned()),
             TargetTriple::from_bazel("wasm32-unknown-unknown".to_owned()),
-            TargetTriple::from_bazel("wasm32-wasi".to_owned()),
+            TargetTriple::from_bazel("wasm32-wasip1".to_owned()),
             TargetTriple::from_bazel("x86_64-apple-darwin".to_owned()),
             TargetTriple::from_bazel("x86_64-apple-ios".to_owned()),
             TargetTriple::from_bazel("x86_64-linux-android".to_owned()),
             TargetTriple::from_bazel("x86_64-pc-windows-msvc".to_owned()),
             TargetTriple::from_bazel("x86_64-unknown-freebsd".to_owned()),
             TargetTriple::from_bazel("x86_64-unknown-linux-gnu".to_owned()),
-        ])
+        ]))
     }
 
     #[test]
@@ -982,7 +1091,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1020,7 +1129,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1033,6 +1142,7 @@ mod test {
     fn render_cargo_build_script() {
         let mut context = Context::default();
         let crate_id = CrateId::new("mock_crate".to_owned(), VERSION_ZERO_ONE_ZERO);
+
         context.crates.insert(
             crate_id.clone(),
             CrateContext {
@@ -1061,15 +1171,111 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
             .unwrap();
 
-        assert!(build_file_content.contains("cargo_build_script("));
-        assert!(build_file_content.contains("name = \"build_script_build\""));
-        assert!(build_file_content.contains("\"crate-name=mock_crate\""));
+        assert!(
+            build_file_content.contains("cargo_build_script("),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("name = \"build_script_build\""),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("\"crate-name=mock_crate\""),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("compile_data = glob("),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            !build_file_content.contains("use_default_shell_env ="),
+            "```\n{}```\n",
+            build_file_content
+        );
+
+        // Ensure `cargo_build_script` requirements are met
+        assert!(build_file_content.contains("name = \"_bs\""));
+    }
+
+    #[test]
+    fn render_cargo_build_script_complex() {
+        let mut context = Context::default();
+        let crate_id = CrateId::new("mock_crate".to_owned(), VERSION_ZERO_ONE_ZERO);
+
+        let attrs = BuildScriptAttributes {
+            use_default_shell_env: Some(1),
+            ..BuildScriptAttributes::default()
+        };
+
+        context.crates.insert(
+            crate_id.clone(),
+            CrateContext {
+                name: crate_id.name,
+                version: crate_id.version,
+                package_url: None,
+                repository: None,
+                targets: BTreeSet::from([Rule::BuildScript(TargetAttributes {
+                    crate_name: "build_script_build".to_owned(),
+                    crate_root: Some("build.rs".to_owned()),
+                    ..TargetAttributes::default()
+                })]),
+                // Build script attributes are required.
+                library_target_name: None,
+                common_attrs: CommonAttributes::default(),
+                build_script_attrs: Some(attrs),
+                license: None,
+                license_ids: BTreeSet::default(),
+                license_file: None,
+                additive_build_file_content: None,
+                disable_pipelining: false,
+                extra_aliased_targets: BTreeMap::default(),
+                alias_rule: None,
+                override_targets: BTreeMap::default(),
+            },
+        );
+
+        let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
+        let output = renderer.render(&context, None).unwrap();
+
+        let build_file_content = output
+            .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
+            .unwrap();
+
+        assert!(
+            build_file_content.contains("cargo_build_script("),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("name = \"build_script_build\""),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("\"crate-name=mock_crate\""),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("compile_data = glob("),
+            "```\n{}```\n",
+            build_file_content
+        );
+        assert!(
+            build_file_content.contains("use_default_shell_env = 1"),
+            "```\n{}```\n",
+            build_file_content
+        );
 
         // Ensure `cargo_build_script` requirements are met
         assert!(build_file_content.contains("name = \"_bs\""));
@@ -1102,7 +1308,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1140,7 +1346,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1180,7 +1386,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1195,12 +1401,18 @@ mod test {
             generate_binaries: true,
             ..Config::default()
         };
-        let annotations =
-            Annotations::new(test::metadata::alias(), test::lockfile::alias(), config).unwrap();
+        let annotations = Annotations::new(
+            test::metadata::alias(),
+            &None,
+            test::lockfile::alias(),
+            config,
+            Utf8Path::new("/tmp/bazelworkspace"),
+        )
+        .unwrap();
         let context = Context::new(annotations, false).unwrap();
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output.get(&PathBuf::from("BUILD.bazel")).unwrap();
 
@@ -1235,7 +1447,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let defs_module = output.get(&PathBuf::from("defs.bzl")).unwrap();
 
@@ -1273,7 +1485,7 @@ mod test {
             mock_render_config(Some(VendorMode::Remote)),
             mock_supported_platform_triples(),
         );
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let defs_module = output.get(&PathBuf::from("defs.bzl")).unwrap();
         assert!(defs_module.contains("def crate_repositories():"));
@@ -1313,7 +1525,7 @@ mod test {
             mock_render_config(Some(VendorMode::Local)),
             mock_supported_platform_triples(),
         );
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         // Local vendoring does not produce a `crate_repositories` macro
         let defs_module = output.get(&PathBuf::from("defs.bzl")).unwrap();
@@ -1365,7 +1577,7 @@ mod test {
             mock_render_config(Some(VendorMode::Local)),
             mock_supported_platform_triples(),
         );
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1388,6 +1600,7 @@ mod test {
             "generate_binaries": false,
             "generate_build_scripts": false,
             "rendering": {
+                "generate_cargo_toml_env_vars": true,
                 "repository_name": "multi_cfg_dep",
                 "regen_command": "bazel test //crate_universe:unit_test",
             },
@@ -1402,11 +1615,21 @@ mod test {
         let metadata = test::metadata::multi_cfg_dep();
         let lockfile = test::lockfile::multi_cfg_dep();
 
-        let annotations = Annotations::new(metadata, lockfile, config.clone()).unwrap();
+        let annotations = Annotations::new(
+            metadata,
+            &None,
+            lockfile,
+            config.clone(),
+            Utf8Path::new("/tmp/bazelworkspace"),
+        )
+        .unwrap();
         let context = Context::new(annotations, false).unwrap();
 
-        let renderer = Renderer::new(config.rendering, config.supported_platform_triples);
-        let output = renderer.render(&context).unwrap();
+        let renderer = Renderer::new(
+            Arc::new(config.rendering),
+            Arc::new(config.supported_platform_triples),
+        );
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.cpufeatures-0.2.7.bazel"))
@@ -1472,7 +1695,7 @@ mod test {
         );
 
         let renderer = Renderer::new(mock_render_config(None), mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1519,9 +1742,11 @@ mod test {
         );
 
         let mut render_config = mock_render_config(None);
-        render_config.generate_rules_license_metadata = true;
+        Arc::get_mut(&mut render_config)
+            .unwrap()
+            .generate_rules_license_metadata = true;
         let renderer = Renderer::new(render_config, mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1572,9 +1797,11 @@ mod test {
         );
 
         let mut render_config = mock_render_config(None);
-        render_config.generate_rules_license_metadata = true;
+        Arc::get_mut(&mut render_config)
+            .unwrap()
+            .generate_rules_license_metadata = true;
         let renderer = Renderer::new(render_config, mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1636,9 +1863,11 @@ mod test {
         );
 
         let mut render_config = mock_render_config(None);
-        render_config.generate_rules_license_metadata = true;
+        Arc::get_mut(&mut render_config)
+            .unwrap()
+            .generate_rules_license_metadata = true;
         let renderer = Renderer::new(render_config, mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
 
         let build_file_content = output
             .get(&PathBuf::from("BUILD.mock_crate-0.1.0.bazel"))
@@ -1708,11 +1937,12 @@ mod test {
 
         let mut config = mock_render_config(Some(VendorMode::Local));
         // change templates so it matches local vendor
-        config.build_file_template = "//{name}-{version}:BUILD.bazel".into();
+        Arc::get_mut(&mut config).unwrap().build_file_template =
+            "//{name}-{version}:BUILD.bazel".into();
 
         // Enable local vendor mode
         let renderer = Renderer::new(config, mock_supported_platform_triples());
-        let output = renderer.render(&context).unwrap();
+        let output = renderer.render(&context, None).unwrap();
         eprintln!("output before {:?}", output.keys());
         // Local vendoring does not produce a `crate_repositories` macro
         let defs_module = output.get(&PathBuf::from("defs.bzl")).unwrap();
@@ -1745,5 +1975,106 @@ mod test {
             assert!(!path_str.contains('+'));
         }
         assert!(found);
+    }
+
+    /// Tests a situation where we identical aliases to the crate's name on the
+    /// package's deps
+    #[test]
+    fn crate_with_ambiguous_rename() {
+        let mut context = Context::default();
+        let crate_id = CrateId::new("mock_crate".to_owned(), VERSION_ZERO_ONE_ZERO);
+        context
+            .workspace_members
+            .insert(crate_id.clone(), "mock_crate".into());
+        context.crates.insert(
+            crate_id.clone(),
+            CrateContext {
+                name: crate_id.name.clone(),
+                version: crate_id.version.clone(),
+                package_url: Some("http://www.mock_crate.com/".to_owned()),
+                license_ids: BTreeSet::from(["Apache-2.0".to_owned(), "MIT".to_owned()]),
+                license_file: None,
+                additive_build_file_content: None,
+                disable_pipelining: false,
+                extra_aliased_targets: BTreeMap::default(),
+                targets: BTreeSet::from([Rule::Library(mock_target_attributes())]),
+                library_target_name: Some("library_name".into()),
+                common_attrs: CommonAttributes {
+                    deps: Select::from_value(BTreeSet::from([CrateDependency {
+                        id: crate_id,
+                        target: "target".into(),
+                        // this is identical to what we have in the `name` attribute
+                        // which creates conflict in `render_module_build_file`
+                        alias: Some("mock_crate".into()),
+                        local_path: None,
+                    }])),
+                    ..Default::default()
+                },
+                build_script_attrs: None,
+                repository: None,
+                license: None,
+                alias_rule: None,
+                override_targets: BTreeMap::default(),
+            },
+        );
+
+        let mut render_config = mock_render_config(None);
+        Arc::get_mut(&mut render_config)
+            .unwrap()
+            .generate_rules_license_metadata = true;
+        let renderer = Renderer::new(render_config, mock_supported_platform_triples());
+        let output = renderer.render(&context, None).unwrap();
+
+        let build_file_content = output.get(&PathBuf::from("BUILD.bazel")).unwrap();
+
+        println!("{build_file_content}");
+        let expected = indoc! {r#"
+            ###############################################################################
+            # @generated
+            # DO NOT MODIFY: This file is auto-generated by a crate_universe tool. To
+            # regenerate this file, run the following:
+            #
+            #     cargo_bazel_regen_command
+            ###############################################################################
+
+            package(default_visibility = ["//visibility:public"])
+
+            exports_files(
+                [
+                    "cargo-bazel.json",
+                    "defs.bzl",
+                ] + glob(
+                    allow_empty = True,
+                    include = ["*.bazel"],
+                ),
+            )
+
+            filegroup(
+                name = "srcs",
+                srcs = glob(
+                    allow_empty = True,
+                    include = [
+                        "*.bazel",
+                        "*.bzl",
+                    ],
+                ),
+            )
+
+            # Workspace Member Dependencies
+            alias(
+                name = "mock_crate-0.1.0",
+                actual = "@test_rendering__mock_crate-0.1.0//:library_name",
+                tags = ["manual"],
+            )
+
+            alias(
+                name = "mock_crate",
+                actual = "@test_rendering__mock_crate-0.1.0//:library_name",
+                tags = ["manual"],
+            )
+        "#};
+        assert!(build_file_content
+            .replace(' ', "")
+            .contains(&expected.replace(' ', "")));
     }
 }

@@ -16,11 +16,11 @@ impl CrateIndexLookup {
         let crate_ = match self {
             // The crates we care about should all be in the cache already,
             // because `cargo metadata` ran which should have fetched them.
-            Self::Http(index) => Some(
-                index
-                    .crate_from_cache(pkg.name.as_str())
-                    .with_context(|| format!("Failed to get crate from cache for {pkg:?}"))?,
-            ),
+            Self::Http(index) => {
+                Some(index.crate_from_cache(pkg.name.as_str()).with_context(|| {
+                    format!("Failed to get crate from cache: {:?}\n{:?}", index, pkg)
+                })?)
+            }
             Self::Git(index) => index.crate_(pkg.name.as_str()),
         };
         let source_info = crate_.and_then(|crate_idx| {
@@ -69,7 +69,8 @@ mod test {
                 runfiles::rlocation!(
                     runfiles,
                     "rules_rust/crate_universe/test_data/crate_indexes/lazy_static/cargo_home"
-                ),
+                )
+                .unwrap(),
             );
 
             let index = CrateIndexLookup::Http(
@@ -96,8 +97,8 @@ mod test {
             );
         }
         {
-            let _e = EnvVarResetter::set("CARGO_HOME", 
-                runfiles::rlocation!(runfiles, "rules_rust/crate_universe/test_data/crate_indexes/rewritten_lazy_static/cargo_home"));
+            let _e = EnvVarResetter::set("CARGO_HOME",
+                runfiles::rlocation!(runfiles, "rules_rust/crate_universe/test_data/crate_indexes/rewritten_lazy_static/cargo_home").unwrap());
 
             let index = CrateIndexLookup::Http(
                 crates_index::SparseIndex::from_url("sparse+https://index.crates.io/").unwrap(),

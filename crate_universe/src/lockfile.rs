@@ -159,7 +159,13 @@ impl Digest {
     }
 
     pub(crate) fn bin_version(binary: &Path) -> Result<String> {
-        let safe_vars = [OsStr::new("HOMEDRIVE"), OsStr::new("PATHEXT")];
+        let safe_vars = [
+            OsStr::new("HOME"),
+            OsStr::new("HOMEDRIVE"),
+            OsStr::new("PATHEXT"),
+            OsStr::new("NIX_LD"),
+            OsStr::new("NIX_LD_LIBRARY_PATH"),
+        ];
         let env = std::env::vars_os().filter(|(var, _)| safe_vars.contains(&var.as_os_str()));
 
         let output = Command::new(binary)
@@ -241,7 +247,7 @@ mod test {
         );
 
         assert_eq!(
-            Digest("7f8d38b770a838797e24635a9030d4194210ff331f1a5b59c753f23fd197b5d8".to_owned()),
+            Digest("edd73970897c01af3bb0e6c9d62f572203dd38a03c189dcca555d463990aa086".to_owned()),
             digest,
         );
     }
@@ -265,7 +271,7 @@ mod test {
                 TargetTriple::from_bazel("aarch64-unknown-linux-gnu".to_owned()),
                 TargetTriple::from_bazel("aarch64-pc-windows-msvc".to_owned()),
                 TargetTriple::from_bazel("wasm32-unknown-unknown".to_owned()),
-                TargetTriple::from_bazel("wasm32-wasi".to_owned()),
+                TargetTriple::from_bazel("wasm32-wasip1".to_owned()),
                 TargetTriple::from_bazel("x86_64-apple-darwin".to_owned()),
                 TargetTriple::from_bazel("x86_64-pc-windows-msvc".to_owned()),
                 TargetTriple::from_bazel("x86_64-unknown-freebsd".to_owned()),
@@ -286,7 +292,7 @@ mod test {
         );
 
         assert_eq!(
-            Digest("610cbb406b7452d32ae31c45ec82cd3b3b1fb184c3411ef613c948d88492441b".to_owned()),
+            Digest("17a426b0cb5c1eff5114997a35562bc8560afd365ec80ae31b3dcc449ee1fa60".to_owned()),
             digest,
         );
     }
@@ -317,7 +323,7 @@ mod test {
         );
 
         assert_eq!(
-            Digest("e81dba9d36276baa8d491373fe09ef38e71e68c12f70e45b7c260ba2c48a87f5".to_owned()),
+            Digest("1e01331686ba1f26f707dc098cd9d21c39d6ccd8e46be03329bb2470d3833e15".to_owned()),
             digest,
         );
     }
@@ -366,7 +372,7 @@ mod test {
         );
 
         assert_eq!(
-            Digest("f1b8ca07d35905bbd8bba79137ca7a02414b4ef01f28c459b78d1807ac3a8191".to_owned()),
+            Digest("45ccf7109db2d274420fac521f4736a1fb55450ec60e6df698e1be4dc2c89fad".to_owned()),
             digest,
         );
     }

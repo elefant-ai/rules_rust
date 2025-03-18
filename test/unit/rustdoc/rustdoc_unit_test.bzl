@@ -11,6 +11,13 @@ load(
     "assert_argv_contains_prefix_not",
 )
 
+# TODO: `rust_doc_test` currently does not work on Windows.
+# https://github.com/bazelbuild/rules_rust/issues/1156
+NOT_WINDOWS = select({
+    "@platforms//os:windows": ["@platforms//:incompatible"],
+    "//conditions:default": [],
+})
+
 def _get_rustdoc_action(env, tut):
     actions = tut.actions
     action = actions[0]
@@ -67,6 +74,14 @@ def _rustdoc_for_proc_macro_test_impl(ctx):
     return analysistest.end(env)
 
 def _rustdoc_for_lib_with_proc_macro_test_impl(ctx):
+    env = analysistest.begin(ctx)
+    tut = analysistest.target_under_test(env)
+
+    _common_rustdoc_checks(env, tut)
+
+    return analysistest.end(env)
+
+def _rustdoc_for_lib_with_proc_macro_in_docs_test_impl(ctx):
     env = analysistest.begin(ctx)
     tut = analysistest.target_under_test(env)
 
@@ -145,15 +160,16 @@ rustdoc_for_bin_with_cc_lib_test = analysistest.make(_rustdoc_for_bin_with_cc_li
 rustdoc_for_bin_with_transitive_cc_lib_test = analysistest.make(_rustdoc_for_bin_with_transitive_cc_lib_test_impl)
 rustdoc_for_proc_macro_test = analysistest.make(_rustdoc_for_proc_macro_test_impl)
 rustdoc_for_lib_with_proc_macro_test = analysistest.make(_rustdoc_for_lib_with_proc_macro_test_impl)
+rustdoc_for_lib_with_proc_macro_in_docs_test = analysistest.make(_rustdoc_for_lib_with_proc_macro_in_docs_test_impl)
 rustdoc_for_bin_with_transitive_proc_macro_test = analysistest.make(_rustdoc_for_bin_with_transitive_proc_macro_test_impl)
 rustdoc_for_lib_with_cc_lib_test = analysistest.make(_rustdoc_for_lib_with_cc_lib_test_impl)
 rustdoc_with_args_test = analysistest.make(_rustdoc_with_args_test_impl)
 rustdoc_zip_output_test = analysistest.make(_rustdoc_zip_output_test_impl)
 rustdoc_with_json_error_format_test = analysistest.make(_rustdoc_with_json_error_format_test_impl, config_settings = {
-    str(Label("//:error_format")): "json",
+    str(Label("//rust/settings:error_format")): "json",
 })
 
-def _target_maker(rule_fn, name, rustdoc_deps = [], **kwargs):
+def _target_maker(rule_fn, name, rustdoc_deps = [], rustdoc_proc_macro_deps = [], **kwargs):
     rule_fn(
         name = name,
         edition = "2018",
@@ -175,6 +191,8 @@ def _target_maker(rule_fn, name, rustdoc_deps = [], **kwargs):
         name = "{}_doctest".format(name),
         crate = ":{}".format(name),
         deps = rustdoc_deps,
+        proc_macro_deps = rustdoc_proc_macro_deps,
+        target_compatible_with = NOT_WINDOWS,
     )
 
 def _define_targets():
@@ -232,6 +250,20 @@ def _define_targets():
         rustdoc_deps = [":adder"],
         proc_macro_deps = [":rustdoc_proc_macro"],
         crate_features = ["with_proc_macro"],
+    )
+
+    _target_maker(
+        rust_library,
+        name = "lib_with_proc_macro_in_docs",
+        srcs = ["procmacro_in_rustdoc.rs"],
+        proc_macro_deps = [":rustdoc_proc_macro"],
+    )
+
+    _target_maker(
+        rust_library,
+        name = "lib_with_proc_macro_only_in_docs",
+        srcs = ["procmacro_in_rustdoc.rs"],
+        rustdoc_proc_macro_deps = [":rustdoc_proc_macro"],
     )
 
     _target_maker(
@@ -335,6 +367,7 @@ def _define_targets():
     rust_doc_test(
         name = "rustdoc_test_with_alias_test",
         crate = ":lib_dep_with_alias",
+        target_compatible_with = NOT_WINDOWS,
     )
 
 def rustdoc_test_suite(name):
@@ -369,6 +402,11 @@ def rustdoc_test_suite(name):
     rustdoc_for_proc_macro_test(
         name = "rustdoc_for_proc_macro_test",
         target_under_test = ":rustdoc_proc_macro_doc",
+    )
+
+    rustdoc_for_lib_with_proc_macro_in_docs_test(
+        name = "rustdoc_for_lib_with_proc_macro_in_docs_test",
+        target_under_test = ":lib_with_proc_macro_in_docs_doc",
     )
 
     rustdoc_for_lib_with_proc_macro_test(
@@ -414,6 +452,7 @@ def rustdoc_test_suite(name):
             ":rustdoc_for_bin_with_cc_lib_test",
             ":rustdoc_for_bin_with_transitive_cc_lib_test",
             ":rustdoc_for_proc_macro_test",
+            ":rustdoc_for_lib_with_proc_macro_in_docs_test",
             ":rustdoc_for_lib_with_proc_macro_test",
             ":rustdoc_for_lib_with_cc_lib_test",
             ":rustdoc_with_args_test",

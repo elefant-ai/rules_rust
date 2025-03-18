@@ -1,7 +1,0 @@
-syntax = "proto3";
-
-package camel_case;
-
-message NameWithCAPS {
-    string name = 1;
-}

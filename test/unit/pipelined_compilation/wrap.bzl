@@ -1,26 +1,28 @@
 """A custom rule that wraps a crate called to_wrap."""
 
+load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
+
 # buildifier: disable=bzl-visibility
 load("//rust/private:providers.bzl", "BuildInfo", "CrateInfo", "DepInfo", "DepVariantInfo")
 
 # buildifier: disable=bzl-visibility
 load("//rust/private:rustc.bzl", "rustc_compile_action")
 
-def _wrap_impl(ctx):
-    rs_file = ctx.actions.declare_file(ctx.label.name + "_wrapped.rs")
-    crate_name = ctx.attr.crate_name if ctx.attr.crate_name else ctx.label.name
-    ctx.actions.run_shell(
-        outputs = [rs_file],
-        command = """cat <<EOF > {}
+_CONTENT = """\
 // crate_name: {}
 use to_wrap::to_wrap;
 
 pub fn wrap() {{
     to_wrap();
 }}
-EOF
-""".format(rs_file.path, crate_name),
-        mnemonic = "WriteWrapperRsFile",
+"""
+
+def _wrap_impl(ctx):
+    rs_file = ctx.actions.declare_file(ctx.label.name + "_wrapped.rs")
+    crate_name = ctx.attr.crate_name if ctx.attr.crate_name else ctx.label.name
+    ctx.actions.write(
+        output = rs_file,
+        content = _CONTENT.format(crate_name),
     )
 
     toolchain = ctx.toolchains[Label("//rust:toolchain")]
@@ -84,11 +86,8 @@ wrap = rule(
         "crate_name": attr.string(),
         "generate_metadata": attr.bool(default = False),
         "target": attr.label(),
-        "_cc_toolchain": attr.label(
-            default = Label("@bazel_tools//tools/cpp:current_cc_toolchain"),
-        ),
         "_error_format": attr.label(
-            default = Label("//:error_format"),
+            default = Label("//rust/settings:error_format"),
         ),
         "_process_wrapper": attr.label(
             default = Label("//util/process_wrapper"),

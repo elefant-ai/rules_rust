@@ -3,14 +3,14 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 load("@bazel_tools//tools/build_defs/repo:utils.bzl", "maybe")
 
-_BUILDIFIER_VERSION = "7.1.1"
+_BUILDIFIER_VERSION = "8.0.3"
 _BUILDIFIER_URL_TEMPLATE = "https://github.com/bazelbuild/buildtools/releases/download/v{version}/{bin}"
 _BUILDIFIER_INTEGRITY = {
-    "buildifier-darwin-amd64": "sha256-d0YNlXr3oCi7GK223EP6ZLbgAGTkc+rINoq4pwOzp0M=",
-    "buildifier-darwin-arm64": "sha256-yZD0sDsn1qDYb/6TAUcypZwYurDE86TMVjS9OxYp/OM=",
-    "buildifier-linux-amd64": "sha256-VLfyzo8idhz60mRBbpEgVq6chkX1nrZYO4RrSGSh7oM=",
-    "buildifier-linux-arm64": "sha256-HZrx9pVqQ5/KKHii+/dguXyl3wD2aeXRlTvrDEYHrHE=",
-    "buildifier-windows-amd64.exe": "sha256-Mx2IPnyjbIu+KKHoUoqccRAvS+Yj+Tn6PSCk2PAEvqs=",
+    "buildifier-darwin-amd64": "sha256-t6MVLN4LOXGxEH8idK/neMXBVNzfbJxmmiMePABPBH4=",
+    "buildifier-darwin-arm64": "sha256-Z0xmP3tc0DwAL4yoNKjBwAjMtSegoqEy0Ip6NViDsi0=",
+    "buildifier-linux-amd64": "sha256-yWlIfBr4XnCFdsjf3Qu0aB6uWKrXnmiuSIgscIcYQbc=",
+    "buildifier-linux-arm64": "sha256-vdm5Lixl1Gr/7srvtU5o00wnLR9KjFtUkpo+kqt4ggo=",
+    "buildifier-windows-amd64.exe": "sha256-Y6JC9X4lPv57lXPXOcCKPQ5ijv2EAVyNrRfYe2Qp5EM=",
 }
 
 def crates_vendor_deps():

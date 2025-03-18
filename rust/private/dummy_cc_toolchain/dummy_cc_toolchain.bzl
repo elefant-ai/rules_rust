@@ -1,5 +1,7 @@
 """Cc toolchain definitions for use on wasm platforms"""
 
+load("@rules_cc//cc/common:cc_common.bzl", "cc_common")
+
 def _dummy_cc_toolchain_impl(_ctx):
     # The `all_files` attribute is referenced by rustc_compile_action().
     return [platform_common.ToolchainInfo(all_files = depset([]))]
@@ -13,7 +15,7 @@ dummy_cc_toolchain = rule(
 def _config_impl(ctx):
     return cc_common.create_cc_toolchain_config_info(
         ctx = ctx,
-        toolchain_identifier = "dummy-wasm32-cc-toolchain",
+        toolchain_identifier = "dummy-wasm-cc-toolchain",
         host_system_name = "unknown",
         target_system_name = "unknown",
         target_cpu = "unknown",

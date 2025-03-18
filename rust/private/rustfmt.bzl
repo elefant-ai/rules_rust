@@ -38,13 +38,13 @@ def _find_rustfmtable_srcs(crate_info, aspect_ctx = None):
     # Targets with specific tags will not be formatted
     if aspect_ctx:
         ignore_tags = [
-            "no-format",
-            "no-rustfmt",
+            "no_format",
+            "no_rustfmt",
             "norustfmt",
         ]
 
-        for tag in ignore_tags:
-            if tag in aspect_ctx.rule.attr.tags:
+        for tag in aspect_ctx.rule.attr.tags:
+            if tag.replace("-", "_").lower() in ignore_tags:
                 return []
 
     # Filter out any generated files
@@ -92,11 +92,18 @@ def _perform_check(edition, srcs, ctx):
         tools = [rustfmt_toolchain.all_files],
         arguments = [args],
         mnemonic = "Rustfmt",
+        progress_message = "Rustfmt %{label}",
     )
 
     return marker
 
 def _rustfmt_aspect_impl(target, ctx):
+    # Exit early if a target already has a rustfmt output group. This
+    # can be useful for rules which always want to inhibit rustfmt.
+    if OutputGroupInfo in target:
+        if hasattr(target[OutputGroupInfo], "rustfmt_checks"):
+            return []
+
     crate_info = _get_rustfmt_ready_crate_info(target)
 
     if not crate_info:
@@ -127,7 +134,7 @@ Output Groups:
 
 - `rustfmt_checks`: Executes `rustfmt --check` on the specified target.
 
-The build setting `@rules_rust//:rustfmt.toml` is used to control the Rustfmt [configuration settings][cs]
+The build setting `@rules_rust//rust/settings:rustfmt.toml` is used to control the Rustfmt [configuration settings][cs]
 used at runtime.
 
 [cs]: https://rust-lang.github.io/rustfmt/
@@ -140,7 +147,7 @@ generated source files are also ignored by this aspect.
         "_config": attr.label(
             doc = "The `rustfmt.toml` file used for formatting",
             allow_single_file = True,
-            default = Label("//:rustfmt.toml"),
+            default = Label("//rust/settings:rustfmt.toml"),
         ),
         "_process_wrapper": attr.label(
             doc = "A process wrapper for running rustfmt on all platforms",

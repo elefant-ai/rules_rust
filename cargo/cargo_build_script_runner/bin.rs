@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// A simple wrapper around a build_script execution to generate file to reuse
-// by rust_library/rust_binary.
-extern crate cargo_build_script_output_parser;
+//! A simple wrapper around a build_script execution to generate file to reuse
+//! by rust_library/rust_binary.
 
-use cargo_build_script_output_parser::{BuildScriptOutput, CompileAndLinkFlags};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs::{create_dir_all, read_to_string, write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use cargo_build_script_runner::cargo_manifest_dir::{remove_symlink, symlink, RunfilesMaker};
+use cargo_build_script_runner::{BuildScriptOutput, CompileAndLinkFlags};
 
 fn run_buildrs() -> Result<(), String> {
     // We use exec_root.join rather than std::fs::canonicalize, to avoid resolving symlinks, as
@@ -34,7 +35,7 @@ fn run_buildrs() -> Result<(), String> {
     let rustc_env = env::var("RUSTC").expect("RUSTC was not set");
     let manifest_dir = exec_root.join(manifest_dir_env);
     let rustc = exec_root.join(&rustc_env);
-    let Options {
+    let Args {
         progname,
         crate_links,
         out_dir,
@@ -47,13 +48,19 @@ fn run_buildrs() -> Result<(), String> {
         stderr_path,
         rundir,
         input_dep_env_paths,
-    } = parse_args()?;
+        cargo_manifest_maker,
+    } = Args::parse();
+
+    if let Some(cargo_manifest_maker) = &cargo_manifest_maker {
+        cargo_manifest_maker.create_runfiles_dir().unwrap()
+    }
 
     let out_dir_abs = exec_root.join(out_dir);
     // For some reason Google's RBE does not create the output directory, force create it.
     create_dir_all(&out_dir_abs)
         .unwrap_or_else(|_| panic!("Failed to make output directory: {:?}", out_dir_abs));
 
+    let mut exec_root_links = Vec::new();
     if should_symlink_exec_root() {
         // Symlink the execroot to the manifest_dir so that we can use relative paths in the arguments.
         let exec_root_paths = std::fs::read_dir(&exec_root)
@@ -72,6 +79,8 @@ fn run_buildrs() -> Result<(), String> {
 
             symlink_if_not_exists(&path, &link)
                 .map_err(|err| format!("Failed to symlink {path:?} to {link:?}: {err}"))?;
+
+            exec_root_links.push(link)
         }
     }
 
@@ -84,7 +93,7 @@ fn run_buildrs() -> Result<(), String> {
     command
         .current_dir(&working_directory)
         .envs(target_env_vars)
-        .env("OUT_DIR", out_dir_abs)
+        .env("OUT_DIR", &out_dir_abs)
         .env("CARGO_MANIFEST_DIR", manifest_dir)
         .env("RUSTC", rustc)
         .env("RUST_BACKTRACE", "full");
@@ -167,7 +176,7 @@ fn run_buildrs() -> Result<(), String> {
         BuildScriptOutput::outputs_to_env(&buildrs_outputs, &exec_root.to_string_lossy())
             .as_bytes(),
     )
-    .unwrap_or_else(|_| panic!("Unable to write file {:?}", env_file));
+    .unwrap_or_else(|e| panic!("Unable to write file {:?}: {:#?}", env_file, e));
     write(
         &output_dep_env_path,
         BuildScriptOutput::outputs_to_dep_env(
@@ -177,11 +186,16 @@ fn run_buildrs() -> Result<(), String> {
         )
         .as_bytes(),
     )
-    .unwrap_or_else(|_| panic!("Unable to write file {:?}", output_dep_env_path));
-    write(&stdout_path, process_output.stdout)
-        .unwrap_or_else(|_| panic!("Unable to write file {:?}", stdout_path));
-    write(&stderr_path, process_output.stderr)
-        .unwrap_or_else(|_| panic!("Unable to write file {:?}", stderr_path));
+    .unwrap_or_else(|e| panic!("Unable to write file {:?}: {:#?}", output_dep_env_path, e));
+
+    if let Some(path) = &stdout_path {
+        write(path, process_output.stdout)
+            .unwrap_or_else(|e| panic!("Unable to write file {:?}: {:#?}", path, e));
+    }
+    if let Some(path) = &stderr_path {
+        write(path, process_output.stderr)
+            .unwrap_or_else(|e| panic!("Unable to write file {:?}: {:#?}", path, e));
+    }
 
     let CompileAndLinkFlags {
         compile_flags,
@@ -190,11 +204,34 @@ fn run_buildrs() -> Result<(), String> {
     } = BuildScriptOutput::outputs_to_flags(&buildrs_outputs, &exec_root.to_string_lossy());
 
     write(&compile_flags_file, compile_flags.as_bytes())
-        .unwrap_or_else(|_| panic!("Unable to write file {:?}", compile_flags_file));
+        .unwrap_or_else(|e| panic!("Unable to write file {:?}: {:#?}", compile_flags_file, e));
     write(&link_flags_file, link_flags.as_bytes())
-        .unwrap_or_else(|_| panic!("Unable to write file {:?}", link_flags_file));
-    write(&link_search_paths_file, link_search_paths.as_bytes())
-        .unwrap_or_else(|_| panic!("Unable to write file {:?}", link_search_paths_file));
+        .unwrap_or_else(|e| panic!("Unable to write file {:?}: {:#?}", link_flags_file, e));
+    write(&link_search_paths_file, link_search_paths.as_bytes()).unwrap_or_else(|e| {
+        panic!(
+            "Unable to write file {:?}: {:#?}",
+            link_search_paths_file, e
+        )
+    });
+
+    if !exec_root_links.is_empty() {
+        for link in exec_root_links {
+            remove_symlink(&link).map_err(|e| {
+                format!(
+                    "Failed to remove exec_root link '{}' with {:?}",
+                    link.display(),
+                    e
+                )
+            })?;
+        }
+    }
+
+    // Delete any runfiles that do not need to be propagated to down stream dependents.
+    if let Some(cargo_manifest_maker) = cargo_manifest_maker {
+        cargo_manifest_maker
+            .drain_runfiles_dir(&out_dir_abs)
+            .unwrap();
+    }
     Ok(())
 }
 
@@ -205,23 +242,8 @@ fn should_symlink_exec_root() -> bool {
 }
 
 /// Create a symlink from `link` to `original` if `link` doesn't already exist.
-#[cfg(windows)]
 fn symlink_if_not_exists(original: &Path, link: &Path) -> Result<(), String> {
-    if original.is_dir() {
-        std::os::windows::fs::symlink_dir(original, link)
-            .or_else(swallow_already_exists)
-            .map_err(|err| format!("Failed to create directory symlink: {err}"))
-    } else {
-        std::os::windows::fs::symlink_file(original, link)
-            .or_else(swallow_already_exists)
-            .map_err(|err| format!("Failed to create file symlink: {err}"))
-    }
-}
-
-/// Create a symlink from `link` to `original` if `link` doesn't already exist.
-#[cfg(not(windows))]
-fn symlink_if_not_exists(original: &Path, link: &Path) -> Result<(), String> {
-    std::os::unix::fs::symlink(original, link)
+    symlink(original, link)
         .or_else(swallow_already_exists)
         .map_err(|err| format!("Failed to create symlink: {err}"))
 }
@@ -252,7 +274,7 @@ fn swallow_already_exists(err: std::io::Error) -> std::io::Result<()> {
 }
 
 /// A representation of expected command line arguments.
-struct Options {
+struct Args {
     progname: String,
     crate_links: String,
     out_dir: String,
@@ -261,48 +283,82 @@ struct Options {
     link_flags_file: String,
     link_search_paths_file: String,
     output_dep_env_path: String,
-    stdout_path: String,
-    stderr_path: String,
+    stdout_path: Option<String>,
+    stderr_path: Option<String>,
     rundir: String,
     input_dep_env_paths: Vec<String>,
+    cargo_manifest_maker: Option<RunfilesMaker>,
 }
 
-/// Parses positional comamnd line arguments into a well defined struct
-fn parse_args() -> Result<Options, String> {
-    let mut args = env::args().skip(1);
+impl Args {
+    fn parse() -> Self {
+        let mut progname: Result<String, String> =
+            Err("Argument `progname` not provided".to_owned());
+        let mut crate_links: Result<String, String> =
+            Err("Argument `crate_links` not provided".to_owned());
+        let mut out_dir: Result<String, String> = Err("Argument `out_dir` not provided".to_owned());
+        let mut env_file: Result<String, String> =
+            Err("Argument `env_file` not provided".to_owned());
+        let mut compile_flags_file: Result<String, String> =
+            Err("Argument `compile_flags_file` not provided".to_owned());
+        let mut link_flags_file: Result<String, String> =
+            Err("Argument `link_flags_file` not provided".to_owned());
+        let mut link_search_paths_file: Result<String, String> =
+            Err("Argument `link_search_paths_file` not provided".to_owned());
+        let mut output_dep_env_path: Result<String, String> =
+            Err("Argument `output_dep_env_path` not provided".to_owned());
+        let mut stdout_path = None;
+        let mut stderr_path = None;
+        let mut rundir: Result<String, String> = Err("Argument `rundir` not provided".to_owned());
+        let mut input_dep_env_paths = Vec::new();
+        let mut cargo_manifest_maker = None;
 
-    // TODO: we should consider an alternative to positional arguments.
-    match (args.next(), args.next(), args.next(), args.next(), args.next(), args.next(), args.next(), args.next(), args.next(), args.next(), args.next()) {
-        (
-            Some(progname),
-            Some(crate_links),
-            Some(out_dir),
-            Some(env_file),
-            Some(compile_flags_file),
-            Some(link_flags_file),
-            Some(link_search_paths_file),
-            Some(output_dep_env_path),
-            Some(stdout_path),
-            Some(stderr_path),
-            Some(rundir),
-        ) => {
-            Ok(Options{
-                progname,
-                crate_links,
-                out_dir,
-                env_file,
-                compile_flags_file,
-                link_flags_file,
-                link_search_paths_file,
-                output_dep_env_path,
-                stdout_path,
-                stderr_path,
-                rundir,
-                input_dep_env_paths: args.collect(),
-            })
+        for mut arg in env::args().skip(1) {
+            if arg.starts_with("--script=") {
+                progname = Ok(arg.split_off("--script=".len()));
+            } else if arg.starts_with("--links=") {
+                crate_links = Ok(arg.split_off("--links=".len()));
+            } else if arg.starts_with("--out_dir=") {
+                out_dir = Ok(arg.split_off("--out_dir=".len()));
+            } else if arg.starts_with("--env_out=") {
+                env_file = Ok(arg.split_off("--env_out=".len()));
+            } else if arg.starts_with("--flags_out=") {
+                compile_flags_file = Ok(arg.split_off("--flags_out=".len()));
+            } else if arg.starts_with("--link_flags=") {
+                link_flags_file = Ok(arg.split_off("--link_flags=".len()));
+            } else if arg.starts_with("--link_search_paths=") {
+                link_search_paths_file = Ok(arg.split_off("--link_search_paths=".len()));
+            } else if arg.starts_with("--dep_env_out=") {
+                output_dep_env_path = Ok(arg.split_off("--dep_env_out=".len()));
+            } else if arg.starts_with("--stdout=") {
+                stdout_path = Some(arg.split_off("--stdout=".len()));
+            } else if arg.starts_with("--stderr=") {
+                stderr_path = Some(arg.split_off("--stderr=".len()));
+            } else if arg.starts_with("--rundir=") {
+                rundir = Ok(arg.split_off("--rundir=".len()))
+            } else if arg.starts_with("--input_dep_env_path=") {
+                input_dep_env_paths.push(arg.split_off("--input_dep_env_path=".len()));
+            } else if arg.starts_with("--cargo_manifest_args=") {
+                cargo_manifest_maker = Some(RunfilesMaker::from_param_file(
+                    &arg.split_off("--cargo_manifest_args=".len()),
+                ));
+            }
         }
-        _ => {
-            Err(format!("Usage: $0 progname crate_links out_dir env_file compile_flags_file link_flags_file link_search_paths_file output_dep_env_path stdout_path stderr_path input_dep_env_paths[arg1...argn]\nArguments passed: {:?}", args.collect::<Vec<String>>()))
+
+        Args {
+            progname: progname.unwrap(),
+            crate_links: crate_links.unwrap(),
+            out_dir: out_dir.unwrap(),
+            env_file: env_file.unwrap(),
+            compile_flags_file: compile_flags_file.unwrap(),
+            link_flags_file: link_flags_file.unwrap(),
+            link_search_paths_file: link_search_paths_file.unwrap(),
+            output_dep_env_path: output_dep_env_path.unwrap(),
+            stdout_path,
+            stderr_path,
+            rundir: rundir.unwrap(),
+            input_dep_env_paths,
+            cargo_manifest_maker,
         }
     }
 }

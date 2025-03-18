@@ -1,5 +1,7 @@
 //! A module containing common test helpers
 
+use std::path::PathBuf;
+
 pub(crate) fn mock_cargo_metadata_package() -> cargo_metadata::Package {
     serde_json::from_value(serde_json::json!({
         "name": "mock-pkg",
@@ -40,6 +42,22 @@ pub(crate) fn mock_cargo_lock_package() -> cargo_lock::Package {
         "#,
     ))
     .unwrap()
+}
+
+/// Create a temp directory that is conditionally leaked when running under Bazel.
+/// Bazel will cleanup the test temp directory after tests have finished.
+pub(crate) fn test_tempdir(prefix: &str) -> (Option<tempfile::TempDir>, PathBuf) {
+    match std::env::var("TEST_TMPDIR") {
+        Ok(t) => {
+            let dir = tempfile::TempDir::with_prefix_in(prefix, t).unwrap();
+            (None, dir.into_path())
+        }
+        Err(_) => {
+            let dir = tempfile::TempDir::with_prefix(prefix).unwrap();
+            let path = PathBuf::from(dir.path());
+            (Some(dir), path)
+        }
+    }
 }
 
 pub(crate) mod metadata {
@@ -87,6 +105,14 @@ pub(crate) mod metadata {
         serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/test_data/metadata/no_deps/metadata.json"
+        )))
+        .unwrap()
+    }
+
+    pub(crate) fn path_patching() -> cargo_metadata::Metadata {
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/test_data/metadata/path_patching/metadata.json"
         )))
         .unwrap()
     }
@@ -163,10 +189,26 @@ pub(crate) mod metadata {
         .unwrap()
     }
 
-    pub(crate) fn resolver_2_deps_metadata() -> cargo_metadata::Metadata {
+    pub(crate) fn resolver_2_deps() -> cargo_metadata::Metadata {
         serde_json::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/test_data/metadata/resolver_2_deps/metadata.json"
+        )))
+        .unwrap()
+    }
+
+    pub(crate) fn abspath() -> cargo_metadata::Metadata {
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/test_data/metadata/abspath/metadata.json"
+        )))
+        .unwrap()
+    }
+
+    pub(crate) fn workspace_build_scripts_deps() -> cargo_metadata::Metadata {
+        serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/test_data/metadata/workspace_build_scripts_deps/metadata.json"
         )))
         .unwrap()
     }
@@ -215,6 +257,14 @@ pub(crate) mod lockfile {
         .unwrap()
     }
 
+    pub(crate) fn path_patching() -> cargo_lock::Lockfile {
+        cargo_lock::Lockfile::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/test_data/metadata/path_patching/Cargo.lock"
+        )))
+        .unwrap()
+    }
+
     pub(crate) fn common() -> cargo_lock::Lockfile {
         cargo_lock::Lockfile::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -235,6 +285,22 @@ pub(crate) mod lockfile {
         cargo_lock::Lockfile::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/test_data/metadata/has_package_metadata/Cargo.lock"
+        )))
+        .unwrap()
+    }
+
+    pub(crate) fn abspath() -> cargo_lock::Lockfile {
+        cargo_lock::Lockfile::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/test_data/metadata/abspath/Cargo.lock"
+        )))
+        .unwrap()
+    }
+
+    pub(crate) fn workspace_build_scripts_deps() -> cargo_lock::Lockfile {
+        cargo_lock::Lockfile::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/test_data/metadata/workspace_build_scripts_deps/Cargo.lock"
         )))
         .unwrap()
     }

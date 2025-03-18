@@ -66,7 +66,8 @@ impl FromStr for Label {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         static RE: OnceCell<Regex> = OnceCell::new();
         let re = RE.get_or_try_init(|| {
-            Regex::new(r"^(@@?[\w\d\-_\.~]*)?(//)?([\w\d\-_\./+]+)?(:([\+\w\d\-_\./]+))?$")
+            // TODO: Disallow `~` in repository names once support for Bazel 7.2 is dropped.
+            Regex::new(r"^(@@?[\w\d\-_\.+~]*)?(//)?([\w\d\-_\./+]+)?(:([\+\w\d\-_\./]+))?$")
         });
 
         let cap = re?
@@ -268,7 +269,7 @@ impl Serialize for Label {
 }
 
 struct LabelVisitor;
-impl<'de> Visitor<'de> for LabelVisitor {
+impl Visitor<'_> for LabelVisitor {
     type Value = Label;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -301,7 +302,6 @@ impl Label {
 #[cfg(test)]
 mod test {
     use super::*;
-    use spectral::prelude::*;
     use std::fs::{create_dir_all, File};
     use tempfile::tempdir;
 
@@ -548,8 +548,8 @@ mod test {
         let err = Label::from_absolute_path(&actual_file)
             .unwrap_err()
             .to_string();
-        assert_that(&err).contains("Could not identify workspace");
-        assert_that(&err).contains(format!("{}", actual_file.display()).as_str());
+        assert!(err.contains("Could not identify workspace"));
+        assert!(err.contains(format!("{}", actual_file.display()).as_str()));
     }
 
     #[test]
@@ -566,8 +566,8 @@ mod test {
         let err = Label::from_absolute_path(&actual_file)
             .unwrap_err()
             .to_string();
-        assert_that(&err).contains("Could not identify package");
-        assert_that(&err).contains("Maybe you need to add a BUILD.bazel file");
-        assert_that(&err).contains(format!("{}", actual_file.display()).as_str());
+        assert!(err.contains("Could not identify package"));
+        assert!(err.contains("Maybe you need to add a BUILD.bazel file"));
+        assert!(err.contains(format!("{}", actual_file.display()).as_str()));
     }
 }

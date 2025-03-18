@@ -9,7 +9,8 @@ use cargo_metadata::{
 use cargo_platform::Platform;
 use serde::{Deserialize, Serialize};
 
-use crate::metadata::{CrateId, TreeResolverMetadata};
+use crate::config::CrateId;
+use crate::metadata::TreeResolverMetadata;
 use crate::select::Select;
 use crate::utils::sanitize_module_name;
 
@@ -265,25 +266,34 @@ fn collect_deps_selectable(
 /// Packages may have targets that match aliases of dependents. This function
 /// checks a target to see if it's an unexpected type for a dependency.
 fn is_ignored_package_target(target: &Target) -> bool {
-    target
-        .kind
-        .iter()
-        .any(|t| ["example", "bench", "test"].contains(&t.as_str()))
+    target.kind.iter().any(|t| {
+        matches!(
+            t,
+            cargo_metadata::TargetKind::Example
+                | cargo_metadata::TargetKind::Bench
+                | cargo_metadata::TargetKind::Test
+        )
+    })
 }
 
 fn is_lib_package(package: &Package) -> bool {
     package.targets.iter().any(|target| {
-        target
-            .crate_types
-            .iter()
-            .any(|t| ["lib", "rlib"].contains(&t.as_str()))
-            && !is_ignored_package_target(target)
+        target.crate_types.iter().any(|t| {
+            matches!(
+                t,
+                cargo_metadata::CrateType::Lib | cargo_metadata::CrateType::RLib
+            ) && !is_ignored_package_target(target)
+        })
     })
 }
 
 fn is_proc_macro_package(package: &Package) -> bool {
     package.targets.iter().any(|target| {
-        target.crate_types.iter().any(|t| t == "proc-macro") && !is_ignored_package_target(target)
+        target
+            .crate_types
+            .iter()
+            .any(|t| matches!(t, cargo_metadata::CrateType::ProcMacro))
+            && !is_ignored_package_target(target)
     })
 }
 
@@ -337,9 +347,14 @@ fn get_library_target_name(package: &Package, potential_name: &str) -> Result<St
         .targets
         .iter()
         .filter(|t| {
-            t.kind
-                .iter()
-                .any(|k| k == "lib" || k == "rlib" || k == "proc-macro")
+            t.kind.iter().any(|k| {
+                matches!(
+                    k,
+                    cargo_metadata::TargetKind::Lib
+                        | cargo_metadata::TargetKind::RLib
+                        | cargo_metadata::TargetKind::ProcMacro
+                )
+            })
         })
         .collect();
 
@@ -352,7 +367,7 @@ fn get_library_target_name(package: &Package, potential_name: &str) -> Result<St
         )
     }
 
-    let target = lib_targets.into_iter().last().unwrap();
+    let target = lib_targets.into_iter().next_back().unwrap();
     Ok(target.name.clone())
 }
 
@@ -516,7 +531,7 @@ mod test {
                 let pkg = &metadata[&node.id];
                 pkg.name == name
             })
-            .unwrap()
+            .unwrap_or_else(|| panic!("Unable to find node '{}'", name))
     }
 
     #[test]
@@ -694,10 +709,11 @@ mod test {
             .filter(|(configuration, dep)| {
                 let pkg = &metadata[&dep.package_id];
                 configuration.is_none()
-                    && pkg
-                        .targets
-                        .iter()
-                        .any(|t| t.crate_types.contains(&"rlib".to_owned()))
+                    && pkg.targets.iter().any(|t| {
+                        t.crate_types
+                            .iter()
+                            .any(|t| matches!(t, cargo_metadata::CrateType::RLib))
+                    })
             })
             .map(|(_, dep)| dep)
             .collect();
@@ -905,7 +921,7 @@ mod test {
 
     #[test]
     fn tree_resolver_deps() {
-        let metadata = metadata::resolver_2_deps_metadata();
+        let metadata = metadata::resolver_2_deps();
 
         let mut select = Select::new();
         select.insert(

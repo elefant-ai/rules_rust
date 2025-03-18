@@ -12,8 +12,7 @@ exports_files(
         "Cargo.toml",
         "Cargo.lock",
         "defs.bzl",
-        "docs_bzlmod.bzl",
-        "docs_workspace.bzl",
+        "extensions.bzl",
     ],
     visibility = ["//visibility:public"],
 )
@@ -32,17 +31,30 @@ bzl_library(
     name = "bzl_lib",
     srcs = [":bzl_srcs"],
     visibility = ["//visibility:public"],
-    deps = ["//rust:bzl_lib"],
+    deps = [
+        "//rust:bzl_lib",
+        "@bazel_features//:features",
+    ],
+)
+
+filegroup(
+    name = "rust_data",
+    srcs = glob([
+        "src/**/*.bzl",
+        "src/**/*.j2",
+        "src/**/*.sh",
+        "src/**/*.bat",
+    ]),
 )
 
 filegroup(
     name = "rust_srcs",
     srcs = glob([
-        "src/**/*.bzl",
-        "src/**/*.j2",
         "src/**/*.rs",
-    ]),
-    visibility = ["//:__subpackages__"],
+    ]) + [
+        ":rust_data",
+    ],
+    visibility = ["//crate_universe:__subpackages__"],
 )
 
 rust_library(
@@ -52,10 +64,7 @@ rust_library(
         exclude = ["src/main.rs"],
     ),
     aliases = aliases(),
-    compile_data = glob(
-        include = ["src/**"],
-        exclude = ["src/**/*.rs"],
-    ),
+    compile_data = [":rust_data"],
     edition = "2021",
     proc_macro_deps = all_crate_deps(proc_macro = True),
     # This target embeds additional, stamping related information (see
@@ -86,6 +95,7 @@ alias(
 rust_test(
     name = "unit_test",
     aliases = aliases(),
+    compile_data = glob(["test_data/**"]),
     crate = ":cargo_bazel",
     data = glob(["test_data/**"]) + [
         "//crate_universe/test_data/serialized_configs",
@@ -99,8 +109,14 @@ rust_test(
         "CARGO": "$(rootpath @rules_rust//rust/toolchain:current_cargo_files)",
         "RUSTC": "$(rootpath @rules_rust//rust/toolchain:current_rustc_files)",
     },
+    # TODO: `crate_universe` currently does not work on Windows.
+    # https://github.com/bazelbuild/rules_rust/issues/1156
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
-        "@rules_rust//tools/runfiles",
+        "@rules_rust//rust/runfiles",
     ] + all_crate_deps(
         normal_dev = True,
     ),
@@ -119,20 +135,22 @@ rust_test(
     ],
     edition = "2021",
     env = {
-        "CARGO": "$(rootpath @rules_rust//rust/toolchain:current_cargo_files)",
-        "RUSTC": "$(rootpath @rules_rust//rust/toolchain:current_rustc_files)",
+        "CARGO": "$(rlocationpath @rules_rust//rust/toolchain:current_cargo_files)",
+        "RUSTC": "$(rlocationpath @rules_rust//rust/toolchain:current_rustc_files)",
     },
     proc_macro_deps = all_crate_deps(
         proc_macro_dev = True,
     ),
-    rustc_env = {
-        "CARGO": "$(rootpath @rules_rust//rust/toolchain:current_cargo_files)",
-        "RUSTC": "$(rootpath @rules_rust//rust/toolchain:current_rustc_files)",
-    },
     tags = ["requires-network"],
+    # TODO: `crate_universe` currently does not work on Windows.
+    # https://github.com/bazelbuild/rules_rust/issues/1156
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":cargo_bazel",
-        "@rules_rust//tools/runfiles",
+        "@rules_rust//rust/runfiles",
     ] + all_crate_deps(
         normal = True,
     ),
@@ -147,9 +165,10 @@ rust_test(
     ],
     edition = "2021",
     rustc_env = {
-        "CARGO_TOML": "$(rootpath :Cargo.toml)",
-        "VERSION_BZL": "$(rootpath :version.bzl)",
+        "CARGO_TOML": "$(rlocationpath :Cargo.toml)",
+        "VERSION_BZL": "$(rlocationpath :version.bzl)",
     },
+    deps = ["//rust/runfiles"],
 )
 
 rust_doc(
@@ -166,4 +185,10 @@ rust_doc(
 rust_doc_test(
     name = "rustdoc_test",
     crate = ":cargo_bazel",
+    # TODO: `rust_doc_test` currently does not work on Windows.
+    # https://github.com/bazelbuild/rules_rust/issues/1156
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
 )

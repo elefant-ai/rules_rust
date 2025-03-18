@@ -1,5 +1,5 @@
 {
-  "checksum": "8baf77c337c6bcb99a30354a681f892140a66ea24aa0f5bdb1b520f58f2e9578",
+  "checksum": "769edfd77aed5c457a3cb822bb5068d8b02047dd3bf62f3b34d6975c2d4479c3",
   "crates": {
     "aes 0.8.4": {
       "name": "aes",
@@ -364,6 +364,9 @@
         "version": "1.6.0"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -482,6 +485,9 @@
         "version": "1.13.0"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -1865,6 +1871,9 @@
         "version": "0.8.20"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -3138,6 +3147,9 @@
         "version": "0.14.7"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -3721,6 +3733,9 @@
         "version": "1.0.11"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -4136,6 +4151,9 @@
         "version": "0.2.155"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -4524,6 +4542,9 @@
         "version": "0.7.1"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -4597,6 +4618,9 @@
         "version": "0.9.1"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -4625,7 +4649,7 @@
         {
           "Library": {
             "crate_name": "musl_cross_compiling",
-            "crate_root": "../../../../../../dev/null",
+            "crate_root": "fake.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -5156,6 +5180,9 @@
         "version": "0.2.19"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -5551,6 +5578,9 @@
         "version": "2.8.0"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -5791,10 +5821,52 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "proc-macro"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "default"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "default"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "default"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "default"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "default"
+            ],
+            "i686-pc-windows-msvc": [
+              "default"
+            ],
+            "i686-unknown-linux-gnu": [
+              "default"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "default"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "default"
+            ],
+            "x86_64-apple-darwin": [
+              "default"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default"
+            ],
+            "x86_64-unknown-freebsd": [
+              "default"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "default"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "default"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -5813,6 +5885,9 @@
         "version": "1.0.86"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -5855,10 +5930,52 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "proc-macro"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "default"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "default"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "default"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "default"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "default"
+            ],
+            "i686-pc-windows-msvc": [
+              "default"
+            ],
+            "i686-unknown-linux-gnu": [
+              "default"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "default"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "default"
+            ],
+            "x86_64-apple-darwin": [
+              "default"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "default"
+            ],
+            "x86_64-unknown-freebsd": [
+              "default"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "default"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "default"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -6385,6 +6502,9 @@
         "version": "0.37.27"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -6489,6 +6609,9 @@
         "version": "0.38.34"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -6802,6 +6925,9 @@
         "version": "1.0.204"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -7172,6 +7298,9 @@
         "version": "0.4.9"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ],
@@ -7376,16 +7505,97 @@
             "clone-impls",
             "default",
             "derive",
-            "extra-traits",
-            "fold",
-            "full",
             "parsing",
             "printing",
             "proc-macro",
-            "quote",
-            "visit"
+            "quote"
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-apple-darwin": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "aarch64-pc-windows-msvc": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "aarch64-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "aarch64-unknown-nixos-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "arm-unknown-linux-gnueabi": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "i686-pc-windows-msvc": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "i686-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "powerpc-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "s390x-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "x86_64-apple-darwin": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "x86_64-pc-windows-msvc": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "x86_64-unknown-freebsd": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "x86_64-unknown-linux-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ],
+            "x86_64-unknown-nixos-gnu": [
+              "extra-traits",
+              "fold",
+              "full",
+              "visit"
+            ]
+          }
         },
         "deps": {
           "common": [
@@ -7412,6 +7622,9 @@
         "version": "1.0.109"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -7891,6 +8104,9 @@
         "version": "1.17.0"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8184,6 +8400,9 @@
         "version": "0.3.9"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8249,6 +8468,9 @@
         "version": "0.4.0"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8314,6 +8536,9 @@
         "version": "0.4.0"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8663,6 +8888,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8728,6 +8956,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8793,6 +9024,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8858,6 +9092,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8923,6 +9160,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -8988,6 +9228,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9053,6 +9296,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9118,6 +9364,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9183,6 +9432,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9248,6 +9500,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9313,6 +9568,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9378,6 +9636,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9443,6 +9704,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9508,6 +9772,9 @@
         "version": "0.48.5"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -9573,6 +9840,9 @@
         "version": "0.52.6"
       },
       "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
         "data_glob": [
           "**"
         ]
@@ -10217,15 +10487,15 @@
     "aarch64-apple-ios-sim": [
       "aarch64-apple-ios-sim"
     ],
-    "aarch64-fuchsia": [
-      "aarch64-fuchsia"
-    ],
     "aarch64-linux-android": [
       "aarch64-linux-android"
     ],
     "aarch64-pc-windows-gnullvm": [],
     "aarch64-pc-windows-msvc": [
       "aarch64-pc-windows-msvc"
+    ],
+    "aarch64-unknown-fuchsia": [
+      "aarch64-unknown-fuchsia"
     ],
     "aarch64-unknown-linux-gnu": [
       "aarch64-unknown-linux-gnu",
@@ -10287,8 +10557,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-nto-qnx710",
       "armv7-linux-androideabi",
       "i686-apple-darwin",
@@ -10301,20 +10571,20 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-none"
     ],
     "cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = \"linux\", target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"riscv64\", all(rustix_use_experimental_asm, target_arch = \"powerpc64\"), all(rustix_use_experimental_asm, target_arch = \"mips\"), all(rustix_use_experimental_asm, target_arch = \"mips32r6\"), all(rustix_use_experimental_asm, target_arch = \"mips64\"), all(rustix_use_experimental_asm, target_arch = \"mips64r6\"), target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\")))))))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-nto-qnx710",
       "armv7-linux-androideabi",
       "i686-apple-darwin",
@@ -10327,12 +10597,12 @@
       "thumbv7em-none-eabi",
       "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-none"
     ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
@@ -10371,9 +10641,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -10384,10 +10654,10 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -10396,9 +10666,9 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
       "aarch64-pc-windows-msvc",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -10409,10 +10679,10 @@
       "i686-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-pc-windows-msvc",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu",
       "x86_64-unknown-none"
@@ -10421,8 +10691,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -10437,9 +10707,9 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -10447,8 +10717,8 @@
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -10461,12 +10731,12 @@
       "i686-unknown-linux-gnu",
       "powerpc-unknown-linux-gnu",
       "s390x-unknown-linux-gnu",
-      "wasm32-wasi",
+      "wasm32-wasip1",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -10477,14 +10747,14 @@
       "x86_64-apple-darwin"
     ],
     "cfg(target_os = \"wasi\")": [
-      "wasm32-wasi"
+      "wasm32-wasip1"
     ],
     "cfg(unix)": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
       "aarch64-apple-ios-sim",
-      "aarch64-fuchsia",
       "aarch64-linux-android",
+      "aarch64-unknown-fuchsia",
       "aarch64-unknown-linux-gnu",
       "aarch64-unknown-nixos-gnu",
       "aarch64-unknown-nto-qnx710",
@@ -10499,9 +10769,9 @@
       "s390x-unknown-linux-gnu",
       "x86_64-apple-darwin",
       "x86_64-apple-ios",
-      "x86_64-fuchsia",
       "x86_64-linux-android",
       "x86_64-unknown-freebsd",
+      "x86_64-unknown-fuchsia",
       "x86_64-unknown-linux-gnu",
       "x86_64-unknown-nixos-gnu"
     ],
@@ -10548,17 +10818,14 @@
     "wasm32-unknown-unknown": [
       "wasm32-unknown-unknown"
     ],
-    "wasm32-wasi": [
-      "wasm32-wasi"
+    "wasm32-wasip1": [
+      "wasm32-wasip1"
     ],
     "x86_64-apple-darwin": [
       "x86_64-apple-darwin"
     ],
     "x86_64-apple-ios": [
       "x86_64-apple-ios"
-    ],
-    "x86_64-fuchsia": [
-      "x86_64-fuchsia"
     ],
     "x86_64-linux-android": [
       "x86_64-linux-android"
@@ -10570,6 +10837,9 @@
     ],
     "x86_64-unknown-freebsd": [
       "x86_64-unknown-freebsd"
+    ],
+    "x86_64-unknown-fuchsia": [
+      "x86_64-unknown-fuchsia"
     ],
     "x86_64-unknown-linux-gnu": [
       "x86_64-unknown-linux-gnu",
@@ -10586,5 +10856,6 @@
     "keyring 2.3.3",
     "syn 1.0.109"
   ],
-  "direct_dev_deps": []
+  "direct_dev_deps": [],
+  "unused_patches": []
 }
